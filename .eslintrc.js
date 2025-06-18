@@ -20,7 +20,10 @@ module.exports = {
     'import/no-extraneous-dependencies': ['error', { devDependencies: true }],
     'prefer-arrow-callback': 0,
     'space-before-function-paren': 0,
-    'prettier/prettier': [2, { printWidth: 80 }]
+    'prettier/prettier': [2, { printWidth: 80 }],
+    'no-await-in-loop': 'off',
+    'no-continue': 'off',
+    'no-plusplus': ['error', { allowForLoopAfterthoughts: true }]
   },
   globals: {
     // Constants defined in examples webpack.config

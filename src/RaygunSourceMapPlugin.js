@@ -107,50 +107,72 @@ class RaygunSourceMapPlugin {
 
   async uploadSourceMap(compilation, { sourceFile, sourceMap }) {
     const errMessage = `failed to upload ${sourceMap} to Raygun`;
-    let sourceMapSource;
+    const maxRetries = 4;
+    const baseDelay = 1000;
 
-    try {
-      sourceMapSource = await this.getSource(compilation, sourceMap);
-    } catch (err) {
-      throw new VError(err, errMessage);
-    }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const jitter = Math.floor(Math.random() * 100);
+      // eslint-disable-next-line no-restricted-properties
+      const delay = baseDelay * Math.pow(2, attempt - 1) + jitter;
 
-    const form = new FormData();
-    form.append('url', this.getPublicPath(sourceFile));
-    form.append('file', sourceMapSource);
-
-    let res;
-    try {
-      res = await fetch(
-        `${this.raygunEndpoint}${this.appId}?authToken=${this.accessToken}`,
-        {
-          method: 'POST',
-          body: form
-        }
-      );
-    } catch (err) {
-      // Network or operational errors
-      throw new VError(err, errMessage);
-    }
-
-    // 4xx or 5xx response
-    if (!res.ok) {
-      // Attempt to parse error details from response
-      let details;
       try {
-        const body = await res.json();
-        details = body?.message ?? `${res.status} - ${res.statusText}`;
-      } catch (parseErr) {
-        details = `${res.status} - ${res.statusText}`;
+        const sourceMapSource = await this.getSource(compilation, sourceMap);
+        const form = new FormData();
+        form.append('url', this.getPublicPath(sourceFile));
+        form.append('file', sourceMapSource);
+
+        const res = await fetch(
+          `${this.raygunEndpoint}${this.appId}?authToken=${this.accessToken}`,
+          {
+            method: 'POST',
+            body: form
+          }
+        );
+
+        if (!res.ok) {
+          let details;
+          try {
+            const body = await res.json();
+            details = body?.message ?? `${res.status} - ${res.statusText}`;
+          } catch {
+            details = `${res.status} - ${res.statusText}`;
+          }
+
+          if (res.status >= 500 && res.status < 600 && attempt < maxRetries) {
+            if (!this.silent) {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `Retry ${attempt} for ${sourceMap} after ${delay}ms due to server error: ${details}`
+              );
+            }
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+
+          throw new Error(`${errMessage}: ${details}`);
+        }
+
+        if (!this.silent) {
+          // eslint-disable-next-line no-console
+          console.info(
+            `Uploaded ${sourceMap} to Raygun (AppId: ${this.appId})`
+          );
+        }
+
+        return; // success
+      } catch (err) {
+        if (attempt === maxRetries) {
+          throw new VError(err, `${errMessage} after ${maxRetries} attempts`);
+        }
+
+        if (!this.silent) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Retry ${attempt} for ${sourceMap} after ${delay}ms due to error: ${err.message}`
+          );
+        }
+        await new Promise(r => setTimeout(r, delay));
       }
-
-      throw new Error(`${errMessage}: ${details}`);
-    }
-
-    // Success
-    if (!this.silent) {
-      // eslint-disable-next-line no-console
-      console.info(`Uploaded ${sourceMap} to Raygun (AppId: ${this.appId})`);
     }
   }
 

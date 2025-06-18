@@ -108,12 +108,9 @@ class RaygunSourceMapPlugin {
   async uploadSourceMap(compilation, { sourceFile, sourceMap }) {
     const errMessage = `failed to upload ${sourceMap} to Raygun`;
     const maxRetries = 4;
-    const baseDelay = 1000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const jitter = Math.floor(Math.random() * 100);
-      // eslint-disable-next-line no-restricted-properties
-      const delay = baseDelay * Math.pow(2, attempt - 1) + jitter;
+      const delay = 1000 + Math.floor(Math.random() * 100);
 
       try {
         const sourceMapSource = await this.getSource(compilation, sourceMap);
